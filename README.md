@@ -1,38 +1,143 @@
 # LSTM State Explorer
 
-문장을 한 단어씩 읽을 때 **LSTM의 128차원 hidden state와 cell state가 어떻게 업데이트되는지** 관찰하는 Python 실습입니다.
+IMDB 영화 리뷰로 긍정·부정을 분류하도록 학습한 LSTM의 내부 계산 과정을 숫자로 관찰하는 프로젝트입니다.
+문장을 입력하면 모델이 단어를 순서대로 처리할 때마다 f(Forget gate), i(Input gate), g(Candidate cell state), o(Output gate), c(Cell state), h(Hidden state)를 계산합니다. 각 벡터의 128개 차원을 빠짐없이 출력하고, 차원별 이전 값·현재 값·변화량을 비교합니다.
+이를 통해 새 단어가 들어왔을 때 이전 기억을 얼마나 유지하고, 새 정보를 얼마나 반영하며, 그 결과 상태가 어떻게 바뀌는지 살펴볼 수 있습니다. 관찰에는 학습이 끝난 모델을 사용하며, 가중치는 변경하지 않습니다.
 
-> 직접 구현하기 위한 골격 버전입니다. Python 파일에는 import와 함수 선언만 있으며, 함수 본문은 모두 `pass`입니다. 학습·출력·저장·시각화는 아직 동작하지 않습니다.
+<br>
 
-## 실습 내용
+## 상태와 계산
 
-IMDB 영화 리뷰로 긍정·부정 분류 모델을 학습하고, 짧은 문장을 입력해 단어별 상태 변화를 확인하는 것이 목표입니다.
+모두 128차원 벡터입니다.
 
-```text
-현재 단어 + 이전 h, c → LSTM → 새로운 h, c
-마지막 hidden state → 분류기 → 긍정 점수
+| 기호 | Full Name | 역할 |
+| --- | --- | --- |
+| `f` | Forget gate | 이전 기억을 유지할 비율 |
+| `i` | Input gate | 새 기억 후보를 반영할 비율 |
+| `g` | Candidate cell state | 새로 반영할 기억 후보 |
+| `o` | Output gate | tanh로 변환한 기억을 출력에 반영할 비율 |
+| `c` | Cell state | 이전 기억과 새 기억 후보를 반영한 상태 |
+| `h` | Hidden state | cell state를 변환하고 출력 게이트로 조절한 상태 |
+
+원소 범위: `f` 0~1, `i` 0~1, `g` -1~1, `o` 0~1.
+
+<br>
+
+$$
+\begin{aligned}
+f &= \sigma(W_f x + U_f h_{\mathrm{prev}} + b_f) \\
+i &= \sigma(W_i x + U_i h_{\mathrm{prev}} + b_i) \\
+g &= \tanh(W_g x + U_g h_{\mathrm{prev}} + b_g) \\
+o &= \sigma(W_o x + U_o h_{\mathrm{prev}} + b_o) \\
+c &= f \odot c_{\mathrm{prev}} + i \odot g \\
+h &= o \odot \tanh(c)
+\end{aligned}
+$$
+
+<br>
+
+| 기호 | 설명 |
+| --- | --- |
+| $x$ | 현재 단어의 임베딩 벡터 |
+| $c_{\mathrm{prev}}$, $h_{\mathrm{prev}}$ | 현재 단어를 처리하기 전 cell state와 hidden state |
+| $c$, $h$ | 현재 단어를 처리한 후 cell state와 hidden state |
+| $W_f, W_i, W_g, W_o$ | 입력 벡터에 곱하는 학습된 가중치 행렬 |
+| $U_f, U_i, U_g, U_o$ | 이전 hidden state에 곱하는 학습된 가중치 행렬 |
+| $b_f, b_i, b_g, b_o$ | 학습된 편향 벡터 |
+| $\sigma$ | sigmoid: 각 원소를 0~1 사이로 변환 |
+| $\tanh$ | 쌍곡탄젠트: 각 원소를 -1~1 사이로 변환 |
+| $\odot$ | 같은 위치의 원소끼리 곱하기 |
+
+$W x$와 $U h_{\mathrm{prev}}$는 행렬·벡터 곱입니다.
+
+<br>
+
+## 사용법
+
+### 1. 준비 및 다운로드
+
+**Python 3.12(Windows에서는 64비트)**를 설치합니다. 현재 의존성은 TensorFlow 2.16 계열에 맞춰져 있습니다. <br>
+확인 환경: Windows / Python 3.12.10 / TensorFlow 2.16.2
+
+```bash
+git clone https://github.com/b6star/lstm-state-explorer.git
+cd lstm-state-explorer
 ```
 
-**단어 하나를 처리할 때마다 h의 128개 값과 c의 128개 값을 각각 한 줄씩 출력**합니다. 한 단계에서 총 256개의 상태 값을 확인하며, 각 줄에 다음 정보를 표시하도록 구현합니다.
+### 2. 가상환경 및 라이브러리 설치
 
-```text
-상태·차원     이전 값     현재 값     변화량
-h[000]         ...         ...         ...
-h[001]         ...         ...         ...
+**Windows PowerShell**
+
+```powershell
+py -3.12 -m venv .venv
+.\.venv\Scripts\python.exe -m pip install --upgrade pip
+.\.venv\Scripts\python.exe -m pip install -r requirements.txt
 ```
 
-위 예시는 형식만 보여 줍니다. 실제 구현에서는 h와 c 모두 **0번부터 127번까지 생략 없이 출력**하고, 변화량은 `현재 값 - 이전 값`으로 계산합니다. 결과를 저장하고 히트맵으로 그려 전체 변화 패턴도 살펴봅니다.
+**macOS / Linux**
 
-## 비교 예시
-
-```text
-this movie is good
-this movie is not good
+```bash
+python3.12 -m venv .venv
+./.venv/bin/python -m pip install --upgrade pip
+./.venv/bin/python -m pip install -r requirements.txt
 ```
 
-같은 모델을 사용하고 각 문장의 초기 상태를 0으로 설정합니다. 공통 부분인 `this movie is`까지의 상태가 일치하는지, `not`을 읽으면서 각 차원이 얼마나 바뀌는지 확인합니다. 두 문장의 마지막 `good`을 처리한 상태와 최종 긍정 점수도 비교합니다.
+이후 명령의 `.\.venv\Scripts\python.exe`를 `./.venv/bin/python`으로 바꿉니다. macOS/Linux 실행은 미검증입니다.
 
-같은 단어라도 이전 기억이 다르면 다른 표현을 만들 수 있습니다. 다만 각 차원에 ‘긍정’·‘부정’이라는 고정된 의미가 있는 것은 아니며, 변화량이 크다고 그 차원이 분류에 더 중요한 것도 아닙니다.
+### 3. 모델 학습
+
+```powershell
+.\.venv\Scripts\python.exe train_model.py
+```
+
+IMDB 리뷰로 긍정·부정을 학습하고 `models/lstm.keras`에 저장합니다. 기본 3에포크이며, 최초 데이터 다운로드에는 인터넷 연결이 필요합니다.
+
+모델은 Git에 포함되지 않습니다. 기존 `models/lstm.keras`를 복사했다면 학습을 생략합니다.
+
+### 4. 단어별 상태 출력
+
+```powershell
+.\.venv\Scripts\python.exe inspect_states.py --text "this movie is not good"
+```
+
+`<START>`부터 단어마다 `f`·`i`·`g`·`o`·`c`·`h`를 각각 **128줄씩** 출력합니다. 사전에 없는 단어는 모두 ID 2로 처리됩니다.
+
+| 저장 파일 | 내용 |
+| --- | --- |
+| `outputs/states.txt` | 차원별 이전 값·현재 값·변화량 |
+| `outputs/states.npz` | 상태 벡터의 숫자 배열 |
+
+같은 경로로 실행하면 기존 결과를 덮어씁니다.
+
+### 5. 저장한 결과 다시 출력
+
+```powershell
+.\.venv\Scripts\python.exe visualize.py
+```
+
+저장된 `.npz`를 읽어 숫자를 출력하고 `.txt`로 저장합니다.
+
+<br>
+
+## 결과 읽기
+
+```text
+dim        previous       current         delta
+f[038]     직전 단계 값     현재 단계 값     현재 - 직전
+```
+
+`f[038]`은 이전 `c[038]`을 유지할 비율입니다. 이 행의 `delta`는 `f[038]` 자체의 변화량입니다.
+
+첫 단계에서 `f`·`i`·`g`·`o`의 이전 값과 변화량은 `--`이며, `c`·`h`의 초기값은 0입니다. 차원 번호에 ‘긍정’ 같은 고정된 의미가 지정되어 있지는 않습니다.
+
+같은 모델로 두 문장을 비교하려면:
+
+```powershell
+.\.venv\Scripts\python.exe inspect_states.py --text "this movie is good" --output outputs/good.npz
+.\.venv\Scripts\python.exe inspect_states.py --text "this movie is not good" --output outputs/not_good.npz
+```
+
+<br>
 
 ## 파일 구성
 
@@ -52,4 +157,4 @@ lstm-state-explorer/
     └── sentences.txt
 ```
 
-TensorFlow/Keras, NumPy, Matplotlib을 사용합니다. 구현 후 실행 방법과 실제 관찰 결과를 추가할 예정입니다.
+참고: [Keras LSTM 구현](https://github.com/keras-team/keras/blob/v3.10.0/keras/src/layers/rnn/lstm.py)
