@@ -1,7 +1,7 @@
 from pathlib import Path
 import numpy as np
 
-STATE_NAMES = ("f", "i", "g", "o", "h", "c")
+STATE_NAMES = ("f", "i", "g", "o", "c", "h")
 
 def validate_states(tokens: list[str], states: dict[str, np.ndarray]) -> None:
     if any(name not in states for name in STATE_NAMES):
@@ -22,31 +22,28 @@ def validate_states(tokens: list[str], states: dict[str, np.ndarray]) -> None:
 def format_states(tokens: list[str], states: dict[str, np.ndarray]):
     validate_states(tokens, states)
 
-    yield "f: 이전 기억 유지 비율 | i: 새 기억 반영 비율"
-    yield "g: 새 기억 후보 | o: h로 내보내는 비율"
-    yield "previous/current/delta: 직전 토큰 값 / 현재 토큰 값 / 두 값의 차이"
-    yield "첫 토큰의 게이트는 이전 값이 없으므로 previous와 delta를 --로 표시합니다."
+    yield "토큰별 현재 값: 각 행은 차원, 각 열은 토큰입니다."
 
-    for step, token in enumerate(tokens):
-        yield f"\n{'=' * 76}"
-        yield f"단계 {step + 1} | 단어: {token}"
+    for name in STATE_NAMES:
+        yield from format_single_state(tokens, states, name)
 
-        for name in STATE_NAMES:
-            current = states[name][step]
-            previous = states[name][step - 1] if step > 0 else np.zeros_like(current)
+def format_single_state(tokens: list[str], states: dict[str, np.ndarray], name: str):
+    validate_states(tokens, states)
 
-            yield f"\n{name}: {len(current)}차원"
-            yield f"{'dim':>6} {'previous':>14} {'current':>14} {'delta':>14}"
+    if name not in STATE_NAMES:
+        raise ValueError(f"알 수 없는 상태 이름입니다: {name}")
 
-            # 모든 차원을 한 줄씩 출력
-            for dimension, value in enumerate(current):
-                if step == 0 and name in ("f", "i", "g", "o"):
-                    before, delta = "--", "--"
-                else:
-                    before = f"{previous[dimension]:+.8f}"
-                    delta = f"{value - previous[dimension]:+.8f}"
+    values = states[name]
+    column_width = 14
 
-                yield f"{name}[{dimension:03d}] {before:>14} {value:+14.8f} {delta:>14}"
+    yield f"\n{'=' * 76}"
+    yield f"{name}: {values.shape[1]}차원"
+    yield "현재 값"
+    yield f"{'dim':>8}" + "".join(f"{token:>{column_width}}" for token in tokens)
+
+    for dimension, row in enumerate(values.T):
+        values_text = "".join(f"{value:+{column_width}.8f}" for value in row)
+        yield f"{name}[{dimension:03d}]" + values_text
 
 def print_states(tokens: list[str], states: dict[str, np.ndarray]) -> None:
     for line in format_states(tokens, states):
@@ -66,10 +63,20 @@ def save_states(tokens: list[str], states: dict[str, np.ndarray], output_path: P
         **states
     )
 
-    # 콘솔 출력과 같은 내용을 텍스트로 저장
-    with output_path.with_suffix(".txt").open("w", encoding="utf-8") as file:
-        for line in format_states(tokens, states):
-            file.write(line + "\n")
+    save_separate_state_files(tokens, states, output_path.with_suffix(""))
+
+def save_separate_state_files(
+    tokens: list[str],
+    states: dict[str, np.ndarray],
+    output_stem: Path
+) -> None:
+    validate_states(tokens, states)
+
+    for name in STATE_NAMES:
+        output_path = output_stem.parent / f"{output_stem.name}_{name}.txt"
+        with output_path.open("w", encoding="utf-8") as file:
+            for line in format_single_state(tokens, states, name):
+                file.write(line + "\n")
 
 def load_states(input_path: Path) -> tuple[list[str], dict[str, np.ndarray]]:
     with np.load(input_path, allow_pickle=False) as data:

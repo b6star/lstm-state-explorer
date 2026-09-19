@@ -1,6 +1,6 @@
 # LSTM State Explorer
 
-IMDB 영화 리뷰로 긍정·부정을 분류하도록 학습한 LSTM의 내부 계산 과정을 숫자로 관찰하는 프로젝트입니다.
+IMDB 영화 리뷰로 긍정·부정을 분류하도록 학습한 LSTM(Long Short-Term Memory)의 내부 계산 과정을 숫자로 관찰하는 프로젝트입니다.
 문장을 입력하면 모델이 단어를 순서대로 처리할 때마다 f(Forget gate), i(Input gate), g(Candidate cell state), o(Output gate), c(Cell state), h(Hidden state)를 계산합니다. 각 벡터의 128개 차원을 빠짐없이 출력하고, 차원별 이전 값·현재 값·변화량을 비교합니다.
 이를 통해 새 단어가 들어왔을 때 이전 기억을 얼마나 유지하고, 새 정보를 얼마나 반영하며, 그 결과 상태가 어떻게 바뀌는지 살펴볼 수 있습니다. 관찰에는 학습이 끝난 모델을 사용하며, 가중치는 변경하지 않습니다.
 
@@ -12,14 +12,14 @@ IMDB 영화 리뷰로 긍정·부정을 분류하도록 학습한 LSTM의 내부
 
 | 기호 | Full Name | 역할 |
 | --- | --- | --- |
-| `f` | Forget gate | 이전 기억을 유지할 비율 |
-| `i` | Input gate | 새 기억 후보를 반영할 비율 |
-| `g` | Candidate cell state | 새로 반영할 기억 후보 |
-| `o` | Output gate | tanh로 변환한 기억을 출력에 반영할 비율 |
-| `c` | Cell state | 이전 기억과 새 기억 후보를 반영한 상태 |
-| `h` | Hidden state | cell state를 변환하고 출력 게이트로 조절한 상태 |
+| `f` | Forget gate | 이전 cell state의 각 차원을 얼마나 유지할지 정하는 128차원 벡터 |
+| `i` | Input gate | 새 기억 후보의 각 차원을 얼마나 반영할지 정하는 128차원 벡터 |
+| `g` | Candidate cell state | 현재 단어 벡터와 이전 hidden state로 계산한 새 기억 후보를 담은 128차원 벡터 |
+| `o` | Output gate | tanh로 변환한 cell state의 각 차원을 hidden state에 얼마나 반영할지 정하는 128차원 벡터 |
+| `c` | Cell state | 이전 cell state에 `f`를 곱하고, 새 기억 후보 `g`에 `i`를 곱해 같은 차원끼리 더한 128차원 벡터 |
+| `h` | Hidden state | 현재 cell state에 tanh를 적용한 뒤 같은 차원의 `o`를 곱한 128차원 벡터. 다음 단어 처리와 마지막 단계의 긍정·부정 분류에 사용 |
 
-원소 범위: `f` 0~1, `i` 0~1, `g` -1~1, `o` 0~1.
+원소 범위: `f` 0\~1, `i` 0\~1, `g` -1\~1, `o` 0\~1.
 
 <br>
 
@@ -44,8 +44,8 @@ $$
 | $W_f, W_i, W_g, W_o$ | 입력 벡터에 곱하는 학습된 가중치 행렬 |
 | $U_f, U_i, U_g, U_o$ | 이전 hidden state에 곱하는 학습된 가중치 행렬 |
 | $b_f, b_i, b_g, b_o$ | 학습된 편향 벡터 |
-| $\sigma$ | sigmoid: 각 원소를 0~1 사이로 변환 |
-| $\tanh$ | 쌍곡탄젠트: 각 원소를 -1~1 사이로 변환 |
+| $\sigma$ | sigmoid: 각 원소를 0\~1 사이로 변환 |
+| $\tanh$ | 쌍곡탄젠트: 각 원소를 -1\~1 사이로 변환 |
 | $\odot$ | 같은 위치의 원소끼리 곱하기 |
 
 $W x$와 $U h_{\mathrm{prev}}$는 행렬·벡터 곱입니다.
@@ -104,18 +104,10 @@ IMDB 리뷰로 긍정·부정을 학습하고 `models/lstm.keras`에 저장합�
 
 | 저장 파일 | 내용 |
 | --- | --- |
-| `outputs/states.txt` | 차원별 이전 값·현재 값·변화량 |
 | `outputs/states.npz` | 상태 벡터의 숫자 배열 |
+| `outputs/states_f.txt` 등 | `f`, `i`, `g`, `o`, `c`, `h`별 토큰 가로 표 |
 
 같은 경로로 실행하면 기존 결과를 덮어씁니다.
-
-### 5. 저장한 결과 다시 출력
-
-```powershell
-.\.venv\Scripts\python.exe visualize.py
-```
-
-저장된 `.npz`를 읽어 숫자를 출력하고 `.txt`로 저장합니다.
 
 <br>
 
@@ -152,7 +144,6 @@ lstm-state-explorer/
 ├── text_processing.py
 ├── state_tracker.py
 ├── state_output.py
-├── visualize.py
 └── examples/
     └── sentences.txt
 ```

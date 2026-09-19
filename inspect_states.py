@@ -9,7 +9,7 @@ from tensorflow.keras.datasets import imdb
 from model_io import load_model
 from text_processing import encode_sentence
 from state_tracker import inspect_sentence
-from state_output import print_states, save_states
+from state_output import save_states
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser()
@@ -64,12 +64,11 @@ def main() -> None:
     # 단어별 f, i, g, o와 h, c 수집
     states = inspect_sentence(model, token_ids)
 
-    # 전체 차원 출력 및 저장
-    print_states(tokens, states)
+    # 전체 차원과 상태별 숫자를 파일로 저장
     save_states(tokens, states, args.output)
 
     print(f"\n배열 저장: {args.output}")
-    print(f"텍스트 저장: {args.output.with_suffix('.txt')}")
+    print(f"상태별 텍스트 저장: {args.output.parent / (args.output.stem + '_f.txt')} 등 6개 파일")
 
 if __name__ == "__main__":
     main()
